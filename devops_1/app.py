@@ -55,5 +55,9 @@ def index():
         david_img_url=david_img_url,
     )
 
+@app.route("/menu")
+def show_menu():
+    return render_template("menu.html")
+
 if __name__ == "__main__":
     app.run("0.0.0.0", 1234, debug=True)
