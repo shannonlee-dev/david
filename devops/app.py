@@ -16,3 +16,6 @@ if __name__ == "__main__":
     app.run(host='0.0.0.0', port=8800, debug = True)
 
 #/menu  <---> home함수 <--> html    합체
+
+
+꾸잉222222?
