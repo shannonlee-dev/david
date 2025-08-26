@@ -12,7 +12,7 @@ JSON
       "script", "-q", "-c", "bash -l", "/dev/null"
     ],
   }
-},
+}, 
   
 
 
