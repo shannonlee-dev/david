@@ -6,6 +6,7 @@ from pathlib import Path                    # 파일경로 쉽게 다루기
 from typing import Optional, Union, List, Iterator  # 타입 힌트 (무슨 타입인지 알려줌)
 from datetime import datetime               # 날짜/시간 처리                    # 상수 그룹 만들기
 from dataclasses import dataclass          # 데이터 저장용 클래스 쉽게 만들기
+import google.generativeai as genai # 구글 AI 라이브러리
 
 BULLET = "\u2022\u2009"
 
@@ -17,12 +18,11 @@ class LogReaderConfig:
     show_line_numbers: bool = False          # 줄번호 보여줄지 (기본값: 안보여줌)
     show_timestamp: bool = True              # 시간 정보 보여줄지 (기본값: 보여줌)
     chunk_size: int = 8192                   # 한번에 읽을 데이터 크기 (8KB)
-    candidate_encodings: List[str] = None    # 시도해볼 인코딩 목록
-    
+    candidate_encodings: List[str] = None            
+
     def __post_init__(self):
         # __post_init__은 "객체가 만들어진 직후에 실행되는 함수"
         # 추가 설정이나 검증을 할 때 씀
-        
         if self.candidate_encodings is None:
             self.candidate_encodings = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin1']
             # utf-8-sig: BOM이 있는 UTF-8 (윈도우에서 많이 씀)
@@ -30,6 +30,7 @@ class LogReaderConfig:
             # cp949, euc-kr: 한글 인코딩
             # latin1: 안전망 인코딩 (거의 모든 바이트를 읽을 수 있음)
         
+
         if isinstance(self.file_path, str):
             # isinstance(객체, 타입): "이 객체가 이 타입인가?" 확인
             # 만약 file_path가 문자열이면
@@ -272,12 +273,10 @@ def main() -> int:
 
     parser = create_parser()        # 명령줄 파서 생성
     args = parser.parse_args()      # 실제 명령줄 인자 분석
-    
-    config = LogReaderConfig(
+
+    config = LogReaderConfig(       # 각종 인스턴스 속성 설정
         file_path=args.file,
-        encoding='auto',
         show_line_numbers=args.line_numbers,
-        chunk_size=8192
     )
     
     reader = MissionLogReader(config)   # 로그 리더 객체 생성
