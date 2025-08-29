@@ -1,12 +1,16 @@
-import sys        # 시스템 관련 기능 (종료코드, stdin 등)
-import os         # 운영체제 관련 기능 (파일권한 확인 등)
+import sys
+import os
 import argparse   # 명령줄 옵션 처리 (-n, --help 같은 것들)
 import logging    # 로그 기록 (디버깅용)
-from pathlib import Path                    # 파일경로 쉽게 다루기
-from typing import Optional, Union, List, Iterator  # 타입 힌트 (무슨 타입인지 알려줌)
+from pathlib import Path                 
+from typing import Union, List
 from datetime import datetime               # 날짜/시간 처리                    # 상수 그룹 만들기
 from dataclasses import dataclass          # 데이터 저장용 클래스 쉽게 만들기
-import google.generativeai as genai # 구글 AI 라이브러리
+import json
+
+# pip install google-generativeai
+# export GOOGLE_API_KEY="여기에_복사한_API_키를_붙여넣으세요"
+import google.generativeai as genai
 
 BULLET = "\u2022\u2009"
 
@@ -16,20 +20,12 @@ class LogReaderConfig:
     file_path: Union[Path, str]              # 파일 경로 (Path 객체나 문자열)
     encoding: str = 'auto'                   # 인코딩 방식 (기본값: 자동감지)
     show_line_numbers: bool = False          # 줄번호 보여줄지 (기본값: 안보여줌)
-    show_timestamp: bool = True              # 시간 정보 보여줄지 (기본값: 보여줌)
     chunk_size: int = 8192                   # 한번에 읽을 데이터 크기 (8KB)
     candidate_encodings: List[str] = None            
 
     def __post_init__(self):
-        # __post_init__은 "객체가 만들어진 직후에 실행되는 함수"
-        # 추가 설정이나 검증을 할 때 씀
         if self.candidate_encodings is None:
             self.candidate_encodings = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin1']
-            # utf-8-sig: BOM이 있는 UTF-8 (윈도우에서 많이 씀)
-            # utf-8: 일반 UTF-8 (가장 일반적)
-            # cp949, euc-kr: 한글 인코딩
-            # latin1: 안전망 인코딩 (거의 모든 바이트를 읽을 수 있음)
-        
 
         if isinstance(self.file_path, str):
             # isinstance(객체, 타입): "이 객체가 이 타입인가?" 확인
@@ -50,8 +46,6 @@ class MissionLogReader:
     
     def _setup_logging(self) -> None:
         # 함수명 앞의 _는 "내부에서만 쓰는 함수"라는 의미 (private)
-        # -> None은 "이 함수는 아무것도 리턴하지 않음"이라는 의미
-        """Configure logging for the application."""
         logging.basicConfig(
             # 로깅 기본 설정
             level=logging.INFO,           # INFO 레벨 이상만 보여줘
@@ -64,7 +58,7 @@ class MissionLogReader:
     
     def read_and_display(self) -> bool:
         # 메인 기능 함수 - 파일을 읽고 화면에 출력
-        # -> bool: 성공하면 True, 실패하면 False 리턴
+        # -> bool: 성공하면 True, 실패하면 False 리턴   
         try:            
             if self.config.file_path == '-':
                 self._display_stdin()      # 표준입력에서 읽기
@@ -80,7 +74,6 @@ class MissionLogReader:
             # 파일이 없을 때
             self.logger.error(f"File not found: {self.config.file_path}")
             print(f"❌ Error: The file '{self.config.file_path}' does not exist.", file=sys.stderr)
-            # file=sys.stderr: 에러는 에러 출력으로 (일반 출력과 구분)
             return False
             
         except PermissionError:
@@ -96,7 +89,6 @@ class MissionLogReader:
             return False
             
         except UnicodeDecodeError as e:
-            # 인코딩 문제로 파일을 읽을 수 없을 때
             self.logger.error(f"Encoding error: {e}")
             print(f"❌ Error: Unable to decode file with any supported encoding.", file=sys.stderr)
             return False
@@ -117,20 +109,11 @@ class MissionLogReader:
         
         if not file_path.is_file():
             raise ValueError(f"Path is not a file: {file_path}")
-        
-        # Cross-platform readable check (운영체제 상관없이 읽기 권한 확인)
-        if not os.access(file_path, os.R_OK):
-            # os.access(경로, 권한): 해당 권한이 있는지 확인
-            # os.R_OK: 읽기 권한 확인 상수
-            raise PermissionError(f"File is not readable: {file_path}")
+
     
     def _detect_encoding(self) -> str:
         # 파일의 인코딩을 자동으로 감지
-
-        if self.config.encoding != 'auto':
-            # 사용자가 특정 인코딩을 지정했으면 그대로 사용
-            return self.config.encoding
-            
+         
         file_path = self.config.file_path
         
         # 여러 인코딩을 시도해봄
@@ -151,9 +134,7 @@ class MissionLogReader:
 
         file_path = self.config.file_path
         
-        if self.config.show_timestamp:
-            # 타임스탬프를 보여주는 설정이면 헤더 출력
-            self._print_header()
+        self._print_header()
         
         line_number = 1  # 줄번호 카운터
         
@@ -176,15 +157,16 @@ class MissionLogReader:
                         # 더 이상 읽을 내용이 없으면
                         break  # 루프 종료
                     print(chunk, end='')  # 읽은 내용 바로 출력
+#
+#for chunk in iter(lambda: f.read(self.config.chunk_size), ''):
+#print(chunk, end='')
+
         
-        if self.config.show_timestamp:
-            # 타임스탬프 설정이면 푸터도 출력
-            self._print_footer()
+        self._print_footer()
     
     def _display_stdin(self) -> None:
         # 표준입력(키보드나 파이프)에서 내용을 읽어서 출력
-        if self.config.show_timestamp:
-            self._print_header()
+        self._print_header()
         
         line_number = 1
         
@@ -197,8 +179,7 @@ class MissionLogReader:
                 # iter(함수, 끝값): 함수를 반복 호출하다가 끝값이 나오면 중단
                 print(chunk, end='')
         
-        if self.config.show_timestamp:
-            self._print_footer()
+        self._print_footer()
     
     def _print_header(self) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -208,7 +189,9 @@ class MissionLogReader:
             header = f"\n{'='*60}\n📄 Reading from: STDIN\n"
         else:
             header = f"\n{'='*60}\n📄 Log File: {self.config.file_path.name}\n"
-        header += f"📅 Read at: {timestamp}\n{'='*60}\n"
+        header += f"📅 Read at: {timestamp}\n"
+        header += f"📝 Program Name: main.py\n"
+        header += f"{'='*60}\n\n"
         print(header)
     
     def _print_footer(self) -> None:
@@ -218,7 +201,7 @@ class MissionLogReader:
 class LogFileAnalyzer:
     
     @staticmethod  # 정적 메서드: 클래스 인스턴스 없이도 호출 가능
-    def analyze(file_path: Path, encoding: str = 'utf-8') -> dict:
+    def analyze(file_path: Path, encoding: str) -> dict:
         # 파일을 분석해서 통계 정보를 딕셔너리로 리턴
 
         stats = {
@@ -229,9 +212,8 @@ class LogFileAnalyzer:
             'char_count' : 0,     # 문자 개수
             'last_modified' : datetime.fromtimestamp(file_path.stat().st_mtime),
             'created' : datetime.fromtimestamp(file_path.stat().st_ctime)
-            # 마지막 수정 시간
         }
-        
+
         try:
             with open(file_path, 'r', encoding=encoding, errors='replace') as f:
                 # errors='ignore': 인코딩 에러가 나도 무시하고 계속
@@ -242,7 +224,8 @@ class LogFileAnalyzer:
         except Exception as e:
             # 파일을 읽을 수 없으면 부분 통계만 리턴
             logging.warning(f"Could not analyze file content: {e}")
-        
+            print(f"⚠️ Warning: Could not analyze file content: {e}", file=sys.stderr)
+
         return stats
 
 def create_parser() -> argparse.ArgumentParser:
@@ -280,17 +263,13 @@ def main() -> int:
     )
     
     reader = MissionLogReader(config)   # 로그 리더 객체 생성
-    
-    # Read and display the log
     success = reader.read_and_display()  # 실제 로그 읽기 및 출력
     
     if success and args.stats and config.file_path != '-' and Path(config.file_path).exists():
         print("\n📊 File Statistics:")
         try:
             # 감지된 인코딩이 있으면 사용, 없으면 설정값 사용
-            encoding = reader._detected_encoding or config.encoding
-            if encoding == 'auto':
-                encoding = 'utf-8'  # 자동이면 기본값으로
+            encoding = reader._detected_encoding
             stats = LogFileAnalyzer.analyze(Path(config.file_path), encoding)
             
             # 통계 정보를 예쁘게 출력
