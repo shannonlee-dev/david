@@ -208,11 +208,27 @@ class LLMReportGenerator:
             print(f"❌ LLM 보고서 생성 중 에러 발생: {e}", file=sys.stderr)
             return False
 
+def create_parser() -> argparse.ArgumentParser:
+    # 명령줄 옵션(-n, --help 등)을 처리하는 파서 생성
+    parser = argparse.ArgumentParser()
+
+    # 선택 인자
+    parser.add_argument(
+        '-r', '--report',
+        action='store_true',
+        help='Make report'
+    )
+    return parser
+
 # --- 메인 실행 함수 ---
 
 def main() -> int:
     """스크립트의 메인 로직을 실행합니다."""
     
+    parser = create_parser()        # 명령줄 파서 생성
+    args = parser.parse_args()
+
+
     # 1. 설정 및 객체 생성
     log_file = Path("mission_computer_main.log")
     json_output_file = Path("mission_computer_main.json")
@@ -261,9 +277,10 @@ def main() -> int:
         return 1
 
     # 7. 사고 원인 분석 보고서 작성
-    report_result = reporter.generate_analysis_report(parsed_logs, report_file)
-    if report_result is False:
-        return 1
+    if args.report:
+        report_result = reporter.generate_analysis_report(parsed_logs, report_file)
+        if report_result is False:
+            return 1
 
     print("\n🎉 모든 작업이 성공적으로 완료되었습니다.")
     return 0
