@@ -66,6 +66,11 @@ def save_dangerous_items_csv(dangerous_items):
 def main():
     # 1. CSV 파일 읽기 및 리스트로 변환
     csv_path = Path('./mars_base/Mars_Base_Inventory_List.csv')
+
+    if not csv_path.exists():
+        print(f"파일 경로가 잘못되었습니다: {csv_path}")
+        return 1
+
     inventory_list = read_mars_inventory(csv_path)
     
     if not inventory_list:
