@@ -94,7 +94,7 @@ def main():
     
     while True:
         try:
-            diameter, material = get_user_input()
+            dial = get_useameter, materir_input()
             if diameter is None or material is None:
                 break
             sphere_area(diameter, material, thickness=1)
