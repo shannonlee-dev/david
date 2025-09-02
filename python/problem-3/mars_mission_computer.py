@@ -165,6 +165,7 @@ def main():
 
     print("\n문제 1: DummySensor 테스트")
     ds = DummySensor()
+
     ds.set_env()
     sensor_values = ds.get_env()
     for k,v in sensor_values.items():
