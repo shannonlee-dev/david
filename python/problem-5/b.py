@@ -85,21 +85,9 @@ class Calculator(QWidget):
         row5.setSpacing(15)
         
         # 계산기 아이콘 버튼 (왼쪽 하단)
-        calc_icon_button = QPushButton('🧮')  # 계산기 유니코드 아이콘
+        calc_icon_button = QPushButton('⚏')  # 계산기 아이콘 대신 기호 사용
         calc_icon_button.clicked.connect(lambda: self.on_button_click('calc'))
-        calc_icon_button.setStyleSheet("""
-            QPushButton {
-                background-color: #333333;
-                color: white;
-                border: none;
-                border-radius: 40px;
-                font-size: 32px;
-                font-weight: 300;
-            }
-            QPushButton:pressed {
-                background-color: #737373;
-            }
-        """)
+        self.set_button_style(calc_icon_button, 'dark_gray')
         calc_icon_button.setFixedSize(80, 80)
         row5.addWidget(calc_icon_button)
         
