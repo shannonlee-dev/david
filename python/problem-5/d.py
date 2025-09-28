@@ -1,538 +1,359 @@
 import sys
 import math
-import random
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt5.QtCore import Qt
+from calculator import Calculator
 
 
-class Calculator:
-    """기본 계산기 클래스"""
+class EngineeringCalculator(Calculator):
     
     def __init__(self):
-        self.current_number = '0'
-        self.previous_number = '0'
-        self.operator = None
-        self.waiting_for_operand = False
-    
-    def add(self, a, b):
-        result = a + b
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def subtract(self, a, b):
-        result = a - b
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def multiply(self, a, b):
-        result = a * b
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def divide(self, a, b):
-        if b == 0:
-            raise ZeroDivisionError
-        result = a / b
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def reset(self):
-        self.current_number = '0'
-        self.previous_number = '0'
-        self.operator = None
-        self.waiting_for_operand = False
-    
-    def negative_positive(self):
-        if self.current_number != '0':
-            if self.current_number.startswith('-'):
-                self.current_number = self.current_number[1:]
-            else:
-                self.current_number = '-' + self.current_number
-    
-    def percent(self):
-        value = float(self.current_number) / 100
-        self.current_number = str(value)
-    
-    def equal(self):
-        if self.operator and not self.waiting_for_operand:
-            prev = float(self.previous_number)
-            curr = float(self.current_number)
-            
-            if self.operator == '+':
-                result = self.add(prev, curr)
-            elif self.operator == '-':
-                result = self.subtract(prev, curr)
-            elif self.operator == '×':
-                result = self.multiply(prev, curr)
-            elif self.operator == '÷':
-                result = self.divide(prev, curr)
-            else:
-                result = curr
-            
-            self.current_number = str(result)
-            self.operator = None
-            self.waiting_for_operand = True
-            return result
-
-
-class EngineeringCalculator(Calculator, QWidget):
-    """공학용 계산기 클래스 - Calculator 클래스를 상속"""
-    
-    def __init__(self):
-        Calculator.__init__(self)
+        # Calculator의 초기화를 먼저 실행하지 않고 직접 속성들을 설정
         QWidget.__init__(self)
-        self.memory = 0.0
-        self.angle_mode = 'rad'  # 'rad' or 'deg'
+        self.current_number = '0'
+        self.previous_number = '0'
+        self.operator = None
+        self.waiting_for_operand = False
+        self.percent_pending = False  
+        self.expression = ''
+        self.error_state = False
+        self.parentheses_count = 0  # 열린 괄호 개수
+        self.pending_function = None  # 대기 중인 함수
         self.init_ui()
     
     def init_ui(self):
-        # 메인 레이아웃
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 120, 20, 30)
+        main_layout.setSpacing(15)
+        
         
         # 디스플레이
         self.display = QLabel('0')
-        self.display.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.display.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         self.display.setStyleSheet("""
             QLabel {
                 background-color: black;
                 color: white;
-                font-size: 36px;
-                font-weight: 300;
-                padding: 15px;
-                border: none;
+                font-size: 70px;
+                font-weight: 500; 
+                padding-right: 10px;
+                padding-bottom: 0px;
+                padding-top: 0px;
+                border: none
             }
         """)
-        self.display.setFixedHeight(80)
+        self.display.setFixedHeight(100)
         main_layout.addWidget(self.display)
         
-        # 버튼 레이아웃
-        button_layout = QVBoxLayout()
+        # 버튼 그리드 (아이폰 가로 모드 완전 재현)s 
+        buttons = [
+            # 행 1
+            ['(', ')', 'mc', 'm+', 'm-', 'mr', 'AC', '+/-', '%', '÷'],
+            # 행 2  
+            ['2nd', 'x²', 'x³', 'xʸ', 'eˣ', '10ˣ', '7', '8', '9', '×'],
+            # 행 3
+            ['1/x', '²√x', '³√x', 'ʸ√x', 'ln', 'log₁₀', '4', '5', '6', '-'],
+            # 행 4
+            ['x!', 'sin', 'cos', 'tan', 'e', 'EE', '1', '2', '3', '+'],
+            # 행 5
+            ['⚏', 'sinh', 'cosh', 'tanh', 'π', 'Deg', 'Rand', '0', '.', '=']
+        ]
         
-        # 첫 번째 행: 2nd, π, e, C, AC
-        row1 = QHBoxLayout()
-        self.create_button('2nd', row1, 'gray', self.on_button_click)
-        self.create_button('π', row1, 'gray', self.on_button_click)
-        self.create_button('e', row1, 'gray', self.on_button_click)
-        self.create_button('C', row1, 'gray', self.on_button_click)
-        self.create_button('AC', row1, 'gray', self.on_button_click)
-        button_layout.addLayout(row1)
+        # 작동하는 기능들 정의
+        self.active_functions = {
+            # 기본 계산
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', 
+            '+', '-', '×', '÷', '=', 'AC', '+/-', '%',
+            # 괄호
+            '(', ')',
+            # 핵심 공학 기능
+            'sin', 'cos', 'tan', 'sinh', 'cosh', 'tanh', 'x²', 'x³', 'π'
+        }
         
-        # 두 번째 행: x!, x^y, rad, sin, cos
-        row2 = QHBoxLayout()
-        self.create_button('x!', row2, 'gray', self.on_button_click)
-        self.create_button('x^y', row2, 'gray', self.on_button_click)
-        self.create_button('rad', row2, 'gray', self.on_button_click)
-        self.create_button('sin', row2, 'gray', self.on_button_click)
-        self.create_button('cos', row2, 'gray', self.on_button_click)
-        button_layout.addLayout(row2)
+        for row in buttons:
+            h_layout = QHBoxLayout()
+            h_layout.setSpacing(10)
+            for i, text in enumerate(row):
+                button = self.create_button(text, self.get_color(text))
+                h_layout.addWidget(button)
+                    
+            main_layout.addLayout(h_layout)
         
-        # 세 번째 행: 1/x, x^2, ln, tan, sinh
-        row3 = QHBoxLayout()
-        self.create_button('1/x', row3, 'gray', self.on_button_click)
-        self.create_button('x^2', row3, 'gray', self.on_button_click)
-        self.create_button('ln', row3, 'gray', self.on_button_click)
-        self.create_button('tan', row3, 'gray', self.on_button_click)
-        self.create_button('sinh', row3, 'gray', self.on_button_click)
-        button_layout.addLayout(row3)
-        
-        # 네 번째 행: √x, x^3, log, EE, cosh
-        row4 = QHBoxLayout()
-        self.create_button('√x', row4, 'gray', self.on_button_click)
-        self.create_button('x^3', row4, 'gray', self.on_button_click)
-        self.create_button('log', row4, 'gray', self.on_button_click)
-        self.create_button('EE', row4, 'gray', self.on_button_click)
-        self.create_button('cosh', row4, 'gray', self.on_button_click)
-        button_layout.addLayout(row4)
-        
-        # 다섯 번째 행: mc, mr, m+, m-, tanh
-        row5 = QHBoxLayout()
-        self.create_button('mc', row5, 'gray', self.on_button_click)
-        self.create_button('mr', row5, 'gray', self.on_button_click)
-        self.create_button('m+', row5, 'gray', self.on_button_click)
-        self.create_button('m-', row5, 'gray', self.on_button_click)
-        self.create_button('tanh', row5, 'gray', self.on_button_click)
-        button_layout.addLayout(row5)
-        
-        # 여섯 번째 행: (, ), %, +/-, ÷
-        row6 = QHBoxLayout()
-        self.create_button('(', row6, 'gray', self.on_button_click)
-        self.create_button(')', row6, 'gray', self.on_button_click)
-        self.create_button('%', row6, 'gray', self.on_button_click)
-        self.create_button('+/-', row6, 'gray', self.on_button_click)
-        self.create_button('÷', row6, 'orange', self.on_button_click)
-        button_layout.addLayout(row6)
-        
-        # 일곱 번째 행: Rand, 7, 8, 9, ×
-        row7 = QHBoxLayout()
-        self.create_button('Rand', row7, 'gray', self.on_button_click)
-        self.create_button('7', row7, 'dark_gray', self.on_button_click)
-        self.create_button('8', row7, 'dark_gray', self.on_button_click)
-        self.create_button('9', row7, 'dark_gray', self.on_button_click)
-        self.create_button('×', row7, 'orange', self.on_button_click)
-        button_layout.addLayout(row7)
-        
-        # 여덟 번째 행: ., 4, 5, 6, -
-        row8 = QHBoxLayout()
-        self.create_button('.', row8, 'dark_gray', self.on_button_click)
-        self.create_button('4', row8, 'dark_gray', self.on_button_click)
-        self.create_button('5', row8, 'dark_gray', self.on_button_click)
-        self.create_button('6', row8, 'dark_gray', self.on_button_click)
-        self.create_button('-', row8, 'orange', self.on_button_click)
-        button_layout.addLayout(row8)
-        
-        # 아홉 번째 행: 0, 1, 2, 3, +
-        row9 = QHBoxLayout()
-        self.create_button('0', row9, 'dark_gray', self.on_button_click)
-        self.create_button('1', row9, 'dark_gray', self.on_button_click)
-        self.create_button('2', row9, 'dark_gray', self.on_button_click)
-        self.create_button('3', row9, 'dark_gray', self.on_button_click)
-        self.create_button('+', row9, 'orange', self.on_button_click)
-        button_layout.addLayout(row9)
-        
-        # 마지막 행: =
-        row10 = QHBoxLayout()
-        row10.addStretch()
-        row10.addStretch()
-        row10.addStretch()
-        row10.addStretch()
-        self.create_button('=', row10, 'orange', self.on_button_click)
-        button_layout.addLayout(row10)
-        
-        main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
-        
-        # 윈도우 설정
-        self.setWindowTitle('Engineering Calculator')
-        self.setFixedSize(600, 600)
+        self.setWindowTitle('공학용 계산기')
+        self.setFixedSize(1400, 700)
         self.setStyleSheet("QWidget { background-color: black; }")
     
-    def create_button(self, text, layout, color, callback):
+    def create_button(self, text, color):
         button = QPushButton(text)
-        button.clicked.connect(lambda: callback(text))
-        self.set_button_style(button, color)
-        button.setFixedSize(100, 50)
-        layout.addWidget(button)
+        button.clicked.connect(lambda: self.on_button_click(text))
+        
+        text_color = 'white'
+        
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color}; color: {text_color};
+                border: none; border-radius: 30px; font-size: 25px; font-weight: 550;
+            }}
+            QPushButton:pressed {{ background-color: #555; }}
+        """)
+        button.setFixedSize(110, 80)
         return button
     
-    def set_button_style(self, button, color):
-        if color == 'gray':
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: #A6A6A6;
-                    color: black;
-                    border: none;
-                    border-radius: 25px;
-                    font-size: 16px;
-                    font-weight: 400;
-                }
-                QPushButton:pressed {
-                    background-color: #D4D4D2;
-                }
-            """)
-        elif color == 'dark_gray':
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: #333333;
-                    color: white;
-                    border: none;
-                    border-radius: 25px;
-                    font-size: 20px;
-                    font-weight: 400;
-                }
-                QPushButton:pressed {
-                    background-color: #737373;
-                }
-            """)
-        elif color == 'orange':
-            button.setStyleSheet("""
-                QPushButton {
-                    background-color: #FF9500;
-                    color: white;
-                    border: none;
-                    border-radius: 25px;
-                    font-size: 20px;
-                    font-weight: 400;
-                }
-                QPushButton:pressed {
-                    background-color: #FFB143;
-                }
-            """)
+    def get_color(self, text):
+
+        if text.isdigit() or text == '.' or text == 'Rand':
+            return '#505050'
+
+        elif text in ['+', '-', '×', '÷', '=']:
+            return '#FF9500'
+
+        elif text in ['AC', '+/-', '%']:
+            return '#A6A6A6'
+        else:
+            return '#333'    
+    
+    def update_display(self):
+        # 부모 클래스의 표시 로직 사용
+        current_for_view = self.current_number + '%' if self.percent_pending else self.current_number
+
+        if self.expression and not self.waiting_for_operand:
+            display_text = self.expression + current_for_view
+        elif self.expression and self.waiting_for_operand:
+            display_text = self.expression.rstrip()
+        else:
+            display_text = current_for_view
+        
+        # 에러 메시지 및 긴 텍스트에 대한 폰트 크기 조정
+        if display_text == '정의되지 않음':
+            font_size = 50
+        elif display_text == '오버플로':
+            font_size = 50
+        elif len(display_text) >= 15:
+            font_size = 48
+        elif len(display_text) > 12:
+            font_size = 56
+        else:
+            font_size = 70
+            
+        self.display.setStyleSheet(f"""
+            QLabel {{
+                background-color: black;
+                color: white;
+                font-size: {font_size}px;
+                font-weight: 500;
+                padding-right: 10px;
+                padding-bottom: 10px;
+                padding-top: 0px;
+                border: none
+            }}
+        """)
+        self.display.setText(display_text)
     
     def on_button_click(self, text):
-        try:
-            if text.isdigit():
-                self.input_digit(text)
-            elif text == '.':
-                self.input_decimal()
-            elif text == 'AC':
-                self.reset()
-                self.display.setText('0')
-            elif text == 'C':
-                self.current_number = '0'
-                self.display.setText('0')
-            elif text == '+/-':
-                self.negative_positive()
-                self.display.setText(self.current_number)
-            elif text == '%':
-                self.percent()
-                self.display.setText(self.current_number)
-            elif text in ['+', '-', '×', '÷', 'x^y']:
-                self.set_operator(text)
-            elif text == '=':
-                result = self.equal()
-                if result is not None:
-                    self.display.setText(str(result))
-            elif text == 'π':
-                self.current_number = str(math.pi)
-                self.display.setText(self.current_number)
-            elif text == 'e':
-                self.current_number = str(math.e)
-                self.display.setText(self.current_number)
-            elif text == 'sin':
-                result = self.sin(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'cos':
-                result = self.cos(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'tan':
-                result = self.tan(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'sinh':
-                result = self.sinh(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'cosh':
-                result = self.cosh(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'tanh':
-                result = self.tanh(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'x^2':
-                result = self.square(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'x^3':
-                result = self.cube(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == '√x':
-                result = self.square_root(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'ln':
-                result = self.natural_log(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'log':
-                result = self.log10(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == '1/x':
-                result = self.reciprocal(float(self.current_number))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'x!':
-                result = self.factorial(int(float(self.current_number)))
-                self.current_number = str(result)
-                self.display.setText(self.current_number)
-            elif text == 'mc':
-                self.memory_clear()
-            elif text == 'mr':
-                self.current_number = str(self.memory)
-                self.display.setText(self.current_number)
-            elif text == 'm+':
-                self.memory_add(float(self.current_number))
-            elif text == 'm-':
-                self.memory_subtract(float(self.current_number))
-            elif text == 'Rand':
-                self.current_number = str(random.random())
-                self.display.setText(self.current_number)
-            elif text == 'rad':
-                self.angle_mode = 'deg' if self.angle_mode == 'rad' else 'rad'
-                
-        except (ValueError, ZeroDivisionError, OverflowError, ArithmeticError) as e:
-            self.display.setText('Error')
+        
+        if text not in self.active_functions:
+            return 
+        
+        if text.isdigit():
+            self.input_digit(text)
+        elif text == '.':
+            self.input_decimal()
+        elif text == 'AC':
             self.reset()
-    
-    def input_digit(self, digit):
-        if self.waiting_for_operand:
-            self.current_number = digit
-            self.waiting_for_operand = False
-        else:
-            if self.current_number == '0':
-                self.current_number = digit
-            else:
-                self.current_number += digit
-        
-        self.display.setText(self.current_number)
-    
-    def input_decimal(self):
-        if self.waiting_for_operand:
-            self.current_number = '0.'
-            self.waiting_for_operand = False
-        elif '.' not in self.current_number:
-            self.current_number += '.'
-        
-        self.display.setText(self.current_number)
-    
-    def set_operator(self, operator):
-        if self.operator and not self.waiting_for_operand:
+        elif text == '+/-':
+            self.negative_positive()
+        elif text == '%':
+            self.percent()
+        elif text in ['+', '-', '×', '÷']:
+            self.set_operator(text)
+        elif text == '=':
             self.equal()
         
-        self.previous_number = self.current_number
-        self.operator = operator
+        # === 괄호 처리 ===
+        elif text == '(':
+            self.input_open_parenthesis()
+        elif text == ')':
+            self.input_close_parenthesis()
+        
+        # === 추가된 공학 함수들 ===
+        elif text == 'π':
+            self.input_constant(math.pi)
+        elif text in ['sin', 'cos', 'tan', 'sinh', 'cosh', 'tanh']:
+            self.input_function(text)
+        elif text == 'x²':
+            self.apply_function(self.square)
+        elif text == 'x³':
+            self.apply_function(self.cube)
+        else:
+            pass  # 기타 버튼
+    
+    def input_constant(self, value):
+        """상수 입력"""
+        self.current_number = f"{value:.10g}"
+        self.waiting_for_operand = False
+        self.update_display()
+    
+    def input_function(self, func_name):
+        """함수 입력 (sin, cos 등)"""
+        if self.current_number == '0' or self.waiting_for_operand:
+            self.current_number = ''
+        
+        self.current_number += f"{func_name}("
+        self.parentheses_count += 1
         self.waiting_for_operand = True
+        self.update_display()
+    
+    def input_open_parenthesis(self):
+        """여는 괄호 입력"""
+        if self.current_number == '0' or self.waiting_for_operand:
+            self.current_number = '('
+        else:
+            self.current_number += '('
+        
+        self.parentheses_count += 1
+        self.waiting_for_operand = True
+        self.update_display()
+    
+    def input_close_parenthesis(self):
+        """닫는 괄호 입력"""
+        if self.parentheses_count > 0:
+            if self.current_number.endswith('('):
+                # 빈 괄호는 허용하지 않음
+                return
+            
+            self.current_number += ')'
+            self.parentheses_count -= 1
+            self.waiting_for_operand = False
+            self.update_display()
+    
+    def apply_function(self, func):
+        """단일 인수 함수 적용"""
+        try:
+            result = func(float(self.current_number))
+            # 결과 포맷팅
+            if isinstance(result, float) and result.is_integer():
+                self.current_number = str(int(result))
+            else:
+                if abs(result) < 1e-6 or abs(result) > 1e12:
+                    self.current_number = f"{result:.6e}"
+                else:
+                    self.current_number = f"{result:.10g}"
+            self.waiting_for_operand = False
+            self.update_display()
+        except Exception as e:
+            self.display.setText('Error')
+            print(f"Function error: {e}")
     
     def equal(self):
-        if self.operator and not self.waiting_for_operand:
-            prev = float(self.previous_number)
-            curr = float(self.current_number)
-            
-            if self.operator == '+':
-                result = self.add(prev, curr)
-            elif self.operator == '-':
-                result = self.subtract(prev, curr)
-            elif self.operator == '×':
-                result = self.multiply(prev, curr)
-            elif self.operator == '÷':
-                result = self.divide(prev, curr)
-            elif self.operator == 'x^y':
-                result = self.power(prev, curr)
+        """계산 실행 - 공학 함수 지원"""
+        if self.error_state:
+            self.error_state = False
+            self.reset()
+            return
+
+        # 괄호가 열려있으면 자동으로 닫기
+        while self.parentheses_count > 0:
+            self.current_number += ')'
+            self.parentheses_count -= 1
+
+        try:
+            # 식에 함수가 포함되어 있으면 eval로 계산
+            if any(func in self.current_number for func in ['sin(', 'cos(', 'tan(', 'sinh(', 'cosh(', 'tanh(']):
+                result = self.evaluate_expression(self.current_number)
             else:
-                result = curr
+                # 기본 계산은 부모 클래스 메서드 사용
+                super().equal()
+                return
             
-            self.current_number = str(result)
+            # 결과 포맷팅
+            if isinstance(result, float) and result.is_integer():
+                self.current_number = str(int(result))
+            else:
+                if abs(result) < 1e-6 or abs(result) > 1e12:
+                    self.current_number = f"{result:.6e}"
+                else:
+                    self.current_number = f"{result:.10g}"
+            
+            self.expression = ''
             self.operator = None
             self.waiting_for_operand = True
-            return result
-        return None
+            self.update_display()
+            
+        except Exception as e:
+            self.current_number = '오류'
+            self.error_state = True
+            self.expression = ''
+            self.operator = None
+            self.waiting_for_operand = True
+            self.update_display()
+            print(f"Calculation error: {e}")
     
-    # 삼각함수 메소드들
+    def evaluate_expression(self, expression):
+
+        safe_dict = {
+            'sin': math.sin,
+            'cos': math.cos,
+            'tan': math.tan,
+            'sinh': math.sinh,
+            'cosh': math.cosh,
+            'tanh': math.tanh,
+            'pi': math.pi,
+        }
+        
+        try:
+            # 기본 연산자 변환
+            expression = expression.replace('×', '*').replace('÷', '/')
+            result = eval(expression, {"__builtins__": {}}, safe_dict)
+            return result
+        except:
+            raise ValueError("계산 오류")
+    
+    def reset(self):
+        """초기화 - 괄호 상태도 포함"""
+        super().reset()
+        self.parentheses_count = 0
+        self.pending_function = None
+    
+    # 일부 기본 계산기 메서드들은 부모 클래스에서 상속받음
+    
+    # ===== 작동하는 공학 함수 메소드들 =====
+    
     def sin(self, x):
-        if self.angle_mode == 'deg':
-            x = math.radians(x)
-        result = math.sin(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """사인 함수 (라디안)"""
+        return math.sin(x)
     
     def cos(self, x):
-        if self.angle_mode == 'deg':
-            x = math.radians(x)
-        result = math.cos(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """코사인 함수 (라디안)"""
+        return math.cos(x)
     
     def tan(self, x):
-        if self.angle_mode == 'deg':
-            x = math.radians(x)
-        # tan의 특이점 체크
-        if abs(math.cos(x)) < 1e-15:
-            raise ArithmeticError("tan undefined")
+        """탄젠트 함수 (라디안)"""
         result = math.tan(x)
+        # tan(π/2) 등의 경우 무한대 처리
         if abs(result) > 1e15:
-            raise OverflowError
+            raise ValueError("Undefined")
         return result
     
     def sinh(self, x):
-        result = math.sinh(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """하이퍼볼릭 사인"""
+        return math.sinh(x)
     
     def cosh(self, x):
-        result = math.cosh(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """하이퍼볼릭 코사인"""
+        return math.cosh(x)
     
     def tanh(self, x):
-        result = math.tanh(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """하이퍼볼릭 탄젠트"""
+        return math.tanh(x)
     
-    # 기타 수학 함수들
     def square(self, x):
-        result = x * x
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
+        """제곱 (x²)"""
+        return x * x
     
     def cube(self, x):
-        result = x * x * x
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def square_root(self, x):
-        if x < 0:
-            raise ArithmeticError("Square root of negative number")
-        result = math.sqrt(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def power(self, base, exponent):
-        try:
-            result = math.pow(base, exponent)
-            if abs(result) > 1e15:
-                raise OverflowError
-            return result
-        except ValueError:
-            raise ArithmeticError("Invalid power operation")
-    
-    def natural_log(self, x):
-        if x <= 0:
-            raise ArithmeticError("Log of non-positive number")
-        result = math.log(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def log10(self, x):
-        if x <= 0:
-            raise ArithmeticError("Log of non-positive number")
-        result = math.log10(x)
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def reciprocal(self, x):
-        if x == 0:
-            raise ZeroDivisionError
-        result = 1.0 / x
-        if abs(result) > 1e15:
-            raise OverflowError
-        return result
-    
-    def factorial(self, n):
-        if n < 0 or n != int(n):
-            raise ArithmeticError("Factorial of negative or non-integer")
-        if n > 170:  # factorial(171) causes overflow
-            raise OverflowError
-        result = math.factorial(n)
-        return result
-    
-    # 메모리 기능들
-    def memory_clear(self):
-        self.memory = 0.0
-    
-    def memory_add(self, value):
-        self.memory += value
-    
-    def memory_subtract(self, value):
-        self.memory -= value
+        """세제곱 (x³)"""
+        return x * x * x
 
 
 if __name__ == '__main__':
