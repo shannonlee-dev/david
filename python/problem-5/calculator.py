@@ -25,7 +25,7 @@ class Calculator(QWidget):
         self.display = QLabel('0')
         self.display.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         self.display.setStyleSheet("""
-            QLabel {
+            QLabel {ㄴ
                 background-color: black;
                 color: white;
                 font-size: 70px;
@@ -215,18 +215,20 @@ class Calculator(QWidget):
         if self.waiting_for_operand:
             self.current_number = digit
             self.waiting_for_operand = False
+
         else:
             if self.current_number == '0':
                 self.current_number = digit
             else:
                 self.current_number += digit
-        
+  
         self.update_display()
     
     def input_decimal(self):
         if self.error_state:
             self.error_state = False
             self.reset() 
+
         if self.percent_pending and self.operator is None and not self.waiting_for_operand:
             self.percent_pending = False
 
@@ -379,13 +381,14 @@ class Calculator(QWidget):
             self.error_state = False
             self.reset() 
 
+        if self.current_number[-1] == '.':
+            return
 
         if self.percent_pending:
             value = float(self.current_number) / 100
             self.current_number = str(int(value)) if value == int(value) else str(value)
             self.percent_pending = False
 
-        # 2) 그 다음 부호 토글
         if self.current_number != '0':
             if self.current_number.startswith('-'):
                 self.current_number = self.current_number[1:]
